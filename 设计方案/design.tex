@@ -1,0 +1,23 @@
+\documentclass{article}
+
+\usepackage{ctex}
+\usepackage{graphicx}
+\usepackage{enumerate}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\begin{document}
+远程IO的设计方案:
+\begin{enumerate}
+	\item 实现两路数字输入，一路模拟输入。控制两路数字输出，一路模拟输出。
+	\item 通过板载的按钮和ADC采样滑阻，实现对输出的控制（上位机？）。
+	\item 通过LED亮灭表征数字输出为高$\backslash$低
+	\item 利用STM32的定时器实现脉冲的计数
+\end{enumerate}
+一些问题：
+\begin{enumerate}
+	\item 使用两块开发板进行通信控制还是需要使用上位机将输入显示在电脑，输出由电脑控制?
+	\item 会提供部分例程嘛 
+\end{enumerate}
+
+\end{document}

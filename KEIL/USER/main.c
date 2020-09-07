@@ -2,17 +2,37 @@
 #include "led.h"
 #include "delay.h"
 #include "usart.h"
+#include "key.h"
+#include "beep.h"
+#include "ADCDAC.h"
+/*****
+引脚分配:三路输出,三路输入:两路数字输入\输出,一路模拟输入\输出.
+数字输入: KEY1 KEY2 
+数字输出: LED1 LED2
+模拟输入(ADC):  PF9  adc3 in7
+模拟输出(DAC):  PA4
+报警(蜂鸣器): PA8
+***/
+
 
 int main()
 {
+	//float vol;
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 	LED_Init();
 	uart_Init(115200);
-	u8 t;
-	u8 len;
-	u16 times=0;
+	Key_Init();
+	Beep_Init();
+	Dac_Init();
+	Adc_Init();
 	while(1)
 	{
+		//vol=(float)Get_Adc(7)*(3.3/4096);
+		//printf("ADC is:%fV\r\n",vol);
+		//Delay_ms(100);
+	  DAC_Set_Vol(2000);
+		//Delay_ms(100);
+			
 		/*if(USART_RX_STA&0x8000) 接收到数据
 		
 		{					   
@@ -34,7 +54,7 @@ int main()
 			}
 			if(times%200==0)printf("请输入数据,以回车键结束\r\n");  
 			Delay_ms(10);   
-		}
-	}*/
+		}*/
+	}
 }
 

@@ -338,7 +338,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F40_41xxx,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CORE;..\FWLIB\inc;..\USER;..\HARDWARE\LED;..\SYSTEM\delay;..\SYSTEM\usart</IncludePath>
+              <IncludePath>..\CORE;..\FWLIB\inc;..\USER;..\HARDWARE\LED;..\SYSTEM\delay;..\SYSTEM\usart;..\HARDWARE\ADCDAC;..\HARDWARE\key;..\HARDWARE\BEEP</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -406,6 +406,21 @@
               <FileName>LED.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\HARDWARE\LED\LED.c</FilePath>
+            </File>
+            <File>
+              <FileName>key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\key\key.c</FilePath>
+            </File>
+            <File>
+              <FileName>ADCDAC.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\ADCDAC\ADCDAC.c</FilePath>
+            </File>
+            <File>
+              <FileName>beep.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\BEEP\beep.c</FilePath>
             </File>
           </Files>
         </Group>

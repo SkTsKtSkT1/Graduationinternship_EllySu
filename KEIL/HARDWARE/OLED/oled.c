@@ -2,6 +2,7 @@
 #include "stdlib.h"
 #include "oledfont.h"  	 
 #include "delay.h"
+#include "stdio.h"
 //////////////////////////////////////////////////////////////////////////////////	 
 //本程序只供学习使用，未经作者许可，不得用于其它任何用途
 //ALIENTEK STM32F407开发板
@@ -200,6 +201,7 @@ void OLED_ShowNum(u8 x,u8 y,u32 num,u8 len,u8 size)
 	 	OLED_ShowChar(x+(size/2)*t,y,temp+'0',size,1); 
 	}
 } 
+
 //显示字符串
 //x,y:起点坐标  
 //size:字体大小 
@@ -216,12 +218,30 @@ void OLED_ShowString(u8 x,u8 y,const u8 *p,u8 size)
     }  
 	
 }	
+void OLED_ShowFloat(u8 x,u8 y,float num,u8 size)
+{
+	/*
+	float temp;
+	temp=num;
+	OLED_ShowNum(x+10,y,temp,1,size);
+	temp-=(int)num;
+	temp*=1000;
+	OLED_ShowString(x+15,y,".",size);
+	OLED_ShowNum(x+20,y,temp,4,size);
+	OLED_ShowString(x+45,y,"V",size);
+	*/
+	char temp[10];
+	sprintf((char *)temp,"%0.4f",num);
+	OLED_ShowString(x+10,y,temp,size);
+	OLED_ShowString(x+45,y,"V",size);
+}
+
 //初始化SSD1306					    
 void OLED_Init(void)
 { 	 		 
   GPIO_InitTypeDef  GPIO_InitStructure;
 	
-	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA|RCC_AHB1Periph_GPIOB|RCC_AHB1Periph_GPIOC|RCC_AHB1Periph_GPIOD|RCC_AHB1Periph_GPIOE|RCC_AHB1Periph_GPIOG, ENABLE);//使能PORTA~E,PORTG时钟
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA|RCC_AHB1Periph_GPIOG, ENABLE);//使能PORTA~E,PORTG时钟
   
 #if OLED_MODE==1		//使用8080并口模式		
 	
@@ -253,21 +273,14 @@ void OLED_Init(void)
 	OLED_RD=1; 
 #else					//使用4线SPI 串口模式
 
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_7 ;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10|GPIO_Pin_11|GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15|GPIO_Pin_9 ;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;//普通输出模式
   GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
   GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;//上拉
-  GPIO_Init(GPIOB, &GPIO_InitStructure);//初始化
+  GPIO_Init(GPIOG, &GPIO_InitStructure);//初始化
 	
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6|GPIO_Pin_7;	
-	GPIO_Init(GPIOC, &GPIO_InitStructure);//初始化		
 
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;	
-	GPIO_Init(GPIOD, &GPIO_InitStructure);//初始化		
-	
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15;	
-	GPIO_Init(GPIOG, &GPIO_InitStructure);//初始化
 	
 	OLED_SDIN=1;
 	OLED_SCLK=1;
@@ -276,7 +289,7 @@ void OLED_Init(void)
 	OLED_RS=1;	 
 	
 	OLED_RST=0;
-	delay_ms(100);
+	Delay_ms(100);
 	OLED_RST=1; 
 					  
 	OLED_WR_Byte(0xAE,OLED_CMD); //关闭显示

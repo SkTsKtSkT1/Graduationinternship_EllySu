@@ -231,7 +231,7 @@ void OLED_ShowFloat(u8 x,u8 y,float num,u8 size)
 	OLED_ShowString(x+45,y,"V",size);
 	*/
 	char temp[10];
-	sprintf((char *)temp,"%0.4f",num);
+	sprintf((char *)temp,"%0.3f",num);
 	OLED_ShowString(x+10,y,temp,size);
 	OLED_ShowString(x+45,y,"V",size);
 }

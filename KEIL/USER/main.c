@@ -15,7 +15,7 @@
 模拟输出(DAC):  PA4
 报警(蜂鸣器): PA8
 ***/
-
+ 
 
 int main()
 {
@@ -24,8 +24,8 @@ int main()
 	u8 rs485_i;
 	u8 rs485_len=0;
 	RS485_TX_EN=0;
-	u8 rs485Sendbuf[5]={'H','I','A','\r','\n'};
-	u8 rs485Receivebuf[5]={0};
+	u8 rs485Sendbuf[8]={};
+	u8 rs485Receivebuf[8]={0};
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 	LED_Init();
 	uart_Init(115200);
@@ -76,7 +76,10 @@ int main()
 		}*/
 		OLED_ShowFloat(10,52,vol,12);	    
 		OLED_Refresh_Gram();        //更新显示到OLED 
-		RS485_Receive_Data(rs485Receivebuf,&rs485_len);
+		if(! RS485_TX_EN)
+		{
+			RS485_Receive_Data(rs485Receivebuf,&rs485_len);
+		}
 		if(rs485_len)
 		{
 			if(rs485_len>5) rs485_len=5;

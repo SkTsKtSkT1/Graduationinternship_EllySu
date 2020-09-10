@@ -182,7 +182,7 @@ eMBRTUReceive( UCHAR * pucRcvAddress, UCHAR ** pucFrame, USHORT * pusLength )
     EXIT_CRITICAL_SECTION(  );
     return eStatus;
 }
-
+////
 eMBErrorCode
 eMBRTUSend( UCHAR ucSlaveAddress, const UCHAR * pucFrame, USHORT usLength )
 {

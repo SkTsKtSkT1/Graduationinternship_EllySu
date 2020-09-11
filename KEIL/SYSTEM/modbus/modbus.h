@@ -21,8 +21,9 @@ ADC，DAC高四位为整数部分，低四位为小数（保留三位）：000整数 xxx0
 */
 //u8 receive_temp[7]={0};
 
-void GetSendbuff(u8* send_temp,u8 key1,u8 key2,u8 LED1,u8 LED2,float val);
 
-u8* GetReceivebuff(u8 *buff);
+void GetSendbuff(u8* send_temp,u8 key1,u8 key2,u8 LED1,u8 LED2,float val,u8 ok);
+
+int GetReceivebuff(u8 *buff,u8 *buff1);
 
 #endif

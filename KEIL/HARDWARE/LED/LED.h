@@ -1,6 +1,6 @@
 #ifndef __LED_H_
 #define __LED_H_
-
+#include "stm32f4xx.h"
 
 #define LED1_PIN GPIO_Pin_12
 #define LED2_PIN GPIO_Pin_13

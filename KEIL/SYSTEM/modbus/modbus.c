@@ -1,5 +1,8 @@
 #include "modbus.h"
-
+#include "ADCDAC.h"
+#include "oled.h"
+#include "stm32f4xx.h"
+#include "led.h"
 /*
 地址 功能码  按键1 按键2 LED1 LED2  ADC    DAC     CRC低位   CRC高位 
 
@@ -21,7 +24,7 @@ ADC，DAC扩大一千倍，写入寄存器。
 */
 
 
-void GetSendbuff(u8* send_temp,u8 key1,u8 key2,u8 LED1,u8 LED2,float val)
+void GetSendbuff(u8* send_temp,u8 key1,u8 key2,u8 LED1,u8 LED2,float val,u8 ok) //ok借用byte3最高位
 {
 	u8 byte3=0x00;
 	u16 adc_val=1000*val; //扩大一千倍
@@ -34,6 +37,10 @@ void GetSendbuff(u8* send_temp,u8 key1,u8 key2,u8 LED1,u8 LED2,float val)
 	byte3=byte3|LED1;
 	byte3=byte3<<1;
 	byte3=byte3|LED2;
+	if(ok==1)
+	{
+		byte3=byte3|0x80;
+	}
 	send_temp[2]=byte3;
 	
 	send_temp[4]=adc_val;
@@ -48,8 +55,33 @@ void GetSendbuff(u8* send_temp,u8 key1,u8 key2,u8 LED1,u8 LED2,float val)
 	send_temp[8]=CalCRC(send_temp,7)>>8;
 
 }
-
-u8* GetReceivebuff(u8 *buff)
+/*
+先进行CRC校验 然后比较地址随后进行操作
+*/
+int GetReceivebuff(u8 *buff,u8 *buff1)
 {
-	
+	u8 i;
+	u16 crc_get=0x00;
+	u16 crc_test=CalCRC(buff,7);
+	crc_get=(u16)(buff[8]<<8 | buff[7]);
+	if((crc_get==crc_test)&&(buff[1]=mbaddress))
+	{
+		for(i=0;i<9;i++)
+		{
+			buff1[i]=buff[i];
+		}
+		return 1;
+	}
+	return 0;
 }
+
+
+
+
+
+
+
+
+
+
+

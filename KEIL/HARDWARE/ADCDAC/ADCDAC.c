@@ -31,7 +31,7 @@ void Dac_Init(void)
   
   DAC_SetChannel1Data(DAC_Align_12b_R, 0);  //12位右对齐数据格式设置DAC值
 }
-
+/*
 void Adc_Init(void)
 {
 	GPIO_InitTypeDef  GPIO_InitStructure;
@@ -43,6 +43,43 @@ void Adc_Init(void)
 
 //先初始化IO口
   GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AN;//模拟输入
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;//下拉
+  GPIO_Init(GPIOF, &GPIO_InitStructure);//初始化  
+ 
+	RCC_APB2PeriphResetCmd(RCC_APB2Periph_ADC3,ENABLE);	//ADC3复位
+	RCC_APB2PeriphResetCmd(RCC_APB2Periph_ADC3,DISABLE);	//复位结束	 
+ 
+ 
+  ADC_CommonInitStructure.ADC_Mode = ADC_Mode_Independent;//独立模式
+  ADC_CommonInitStructure.ADC_TwoSamplingDelay = ADC_TwoSamplingDelay_5Cycles;
+  ADC_CommonInitStructure.ADC_DMAAccessMode = ADC_DMAAccessMode_Disabled; //DMA失能
+  ADC_CommonInitStructure.ADC_Prescaler = ADC_Prescaler_Div2; 
+  ADC_CommonInit(&ADC_CommonInitStructure);
+	
+  ADC_InitStructure.ADC_Resolution = ADC_Resolution_12b;//12位模式
+  ADC_InitStructure.ADC_ScanConvMode = DISABLE;//非扫描模式	
+  ADC_InitStructure.ADC_ContinuousConvMode = DISABLE;
+  ADC_InitStructure.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None;//禁止触发检测，使用软件触发
+  ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;//右对齐	
+  ADC_InitStructure.ADC_NbrOfConversion = 1;//1个转换在规则序列中 也就是只转换规则序列1 
+  ADC_Init(ADC3, &ADC_InitStructure);
+	
+ 
+	ADC_Cmd(ADC3, ENABLE);//开启AD转换器	 
+}*/
+
+void Adc_Init(void)
+{
+	GPIO_InitTypeDef  GPIO_InitStructure;
+	ADC_CommonInitTypeDef ADC_CommonInitStructure;
+	ADC_InitTypeDef       ADC_InitStructure;
+	
+  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOF, ENABLE);//使能GPIOF时钟
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC3, ENABLE);//使能ADC3时钟
+
+//先初始化IO口
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10|GPIO_Pin_9;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AN;//模拟输入
   GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;//下拉
   GPIO_Init(GPIOF, &GPIO_InitStructure);//初始化  

@@ -1,6 +1,8 @@
 #include "sys.h"		    
 #include "rs485.h"	 
 #include "delay.h"
+#include "timer.h"
+#include "modbus.h"
 //////////////////////////////////////////////////////////////////////////////////	 
 //本程序只供学习使用，未经作者许可，不得用于其它任何用途
 //ALIENTEK STM32F407开发板
@@ -17,19 +19,24 @@
 
 #if EN_USART2_RX   		//如果使能了接收   	  
 //接收缓存区 	
-u8 RS485_RX_BUF[64];  	//接收缓冲,最大64个字节.
+u8 RS485_RX_BUF[256];  	//接收缓冲,最大256个字节.
 //接收到的数据长度
-u8 RS485_RX_CNT=0;   
+u16 RS485_RX_CNT=0;   
+u16 RS485_Frame_Distance=4;  //单位 ms
+
 void USART2_IRQHandler(void)
 {
 	u8 res;	    
 	if(USART_GetITStatus(USART2, USART_IT_RXNE) != RESET)//接收到数据
 	{	 	
 	  res =USART_ReceiveData(USART2);//;读取接收到的数据USART2->DR
-		if(RS485_RX_CNT<64)
+		if(RS485_RX_CNT<2047)
 		{
 			RS485_RX_BUF[RS485_RX_CNT]=res;		//记录接收到的值
 			RS485_RX_CNT++;						//接收数据增加1 
+			TIM_ClearITPendingBit(TIM3,TIM_IT_Update);//清除定时器溢出中断
+      TIM_SetCounter(TIM3,0);//当接收到一个新的字节，将定时器7复位为0，重新计时（相当于喂狗）
+      TIM_Cmd(TIM3,ENABLE);//开始计时
 		} 
 	}  											 
 } 
@@ -93,6 +100,11 @@ void RS485_Init(u32 bound)
 #endif	
 	
 	RS485_TX_EN=0;				//默认为接收模式	
+	
+	TIM3_Init(RS485_Frame_Distance);
+	
+	Modbus_RegMap(); //寄存器映射
+	
 }
 
 //RS485发送len个字节.
@@ -101,7 +113,7 @@ void RS485_Init(u32 bound)
 void RS485_Send_Data(u8 *buf,u8 len)
 {
 	u8 t;
-	//RS485_TX_EN=1;			//设置为发送模式
+	RS485_TX_EN=1;			//设置为发送模式
   	for(t=0;t<len;t++)		//循环发送数据
 	{
 	  while(USART_GetFlagStatus(USART2,USART_FLAG_TC)==RESET); //等待发送结束		

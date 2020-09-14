@@ -9,171 +9,198 @@
 #include "rs485.h"
 #include "mbcrc.h"
 #include "modbus.h"
-/*****
-引脚分配:三路输出,三路输入:两路数字输入\输出,一路模拟输入\输出.
-数字输入: KEY1 KEY2 
-数字输出: LED1 LED2
-模拟输入(ADC):  PF9  adc3 in7
-模拟输出(DAC):  PA4
-报警(蜂鸣器): PA8
-***/
- /*
-地址 功能码  按键1 按键2 LED1 LED2  ADC    DAC     CRC低位   CRC高位 
-
-功能码0x02（读）  0
- 1  2              3                      4/5      6/7     8        9
-       0000按键1 按键2 LED1 LED2         ADC       0   CRC低位   CRC高位  
-
-功能码 0x05 （写） 1
-1  2             3                     4/5      6/7     8       9
-      000000  LED1 LED2                0        DAC  CRC低位   CRC高位
-
-ADC，DAC扩大一千倍，写入寄存器。
-*/
-u8 LED1=0,LED2=0;
- void open_led(u16 led_pin)
+#include "timer.h"
+//168mHZ
+int main()
 {
-	GPIO_ResetBits(GPIOB,led_pin);
-	switch(led_pin)
+	//RCC_ClocksTypeDef RCC_Clocks;
+	//RCC_GetClocksFreq(&RCC_Clocks);
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+	LED_Init();
+	Key_Init();
+	OLED_Init();
+	RS485_Init(9600);
+	OLED_ShowString(0,0,"RemoteIo_ModeBus",16);
+	OLED_Refresh_Gram( );//更新显示到OLED
+//	LED1=0;
+//	LED2=1;
+	while(1)
 	{
-		case LED1_PIN:LED1=1;break;
-		case LED2_PIN:LED2=1;break;
+		RS485_service();
 	}
 }
-void close_led(u16 led_pin)
+
+
+
+
+/*
+
+
+ void USART2_IRQHandler(void)//串口2中断服务程序
+ {
+       
+        u8 res;
+         u8 err;
+      
+       if(USART_GetITStatus(USART2,USART_IT_RXNE)!=RESET)
+         {
+               if(USART_GetFlagStatus(USART2,USART_FLAG_NE|USART_FLAG_FE|USART_FLAG_PE)) err=1;//检测到噪音、帧错误或校验错误
+                else err=0;
+                //LED0=0;
+                 res=USART_ReceiveData(USART2); //读接收到的字节，同时相关标志自动清除
+                 
+                 if((RS485_RX_CNT<2047)&&(err==0))
+                {
+                        RS485_RX_BUFF[RS485_RX_CNT]=res;
+                         RS485_RX_CNT++;
+                        
+                        TIM_ClearITPendingBit(TIM7,TIM_IT_Update);//清除定时器溢出中断
+                        TIM_SetCounter(TIM7,0);//当接收到一个新的字节，将定时器7复位为0，重新计时（相当于喂狗）
+                        TIM_Cmd(TIM7,ENABLE);//开始计时
+                 }
+         }
+ }
+
+///////////////////////////////////////////////////////////////////////////////////////
+ //用定时器7判断接收空闲时间，当空闲时间大于指定时间，认为一帧结束
+//定时器7中断服务程序         
+ void TIM7_IRQHandler(void)
+ {                                                                   
+       if(TIM_GetITStatus(TIM7,TIM_IT_Update)!=RESET)
+        {
+                TIM_ClearITPendingBit(TIM7,TIM_IT_Update);//清除中断标志
+                TIM_Cmd(TIM7,DISABLE);//停止定时器
+                RS485_TX_EN=1;//停止接收，切换为发送状态
+                RS485_FrameFlag=1;//置位帧结束标记
+         }
+ }
+ 
+ /////////////////////////////////////////////////////////////////////////////////////
+//RS485服务程序，用于处理接收到的数据(请在主函数中循环调用)
+u16 startRegAddr;
+u16 RegNum;
+u16 calCRC;
+void RS485_Service(void)
 {
-	GPIO_SetBits(GPIOB,led_pin);
-	switch(led_pin)
-	{
-		case LED1_PIN:LED1=0;break;
-		case LED2_PIN:LED2=0;break;
-	}
+        u16 recCRC;
+        if(RS485_FrameFlag==1)
+        {
+                if(RS485_RX_BUFF[0]==RS485_Addr)//地址正确
+                {
+                        if((RS485_RX_BUFF[1]==01)||(RS485_RX_BUFF[1]==02)||(RS485_RX_BUFF[1]==03)||(RS485_RX_BUFF[1]==05)||(RS485_RX_BUFF[1]==06)||(RS485_RX_BUFF[1]==15)||(RS485_RX_BUFF[1]==16))//功能码正确
+                  {
+                                startRegAddr=(((u16)RS485_RX_BUFF[2])<<8)|RS485_RX_BUFF[3];//获取寄存器起始地址
+                                if(startRegAddr<1000)//寄存器地址在范围内
+                                {
+                                        calCRC=CalCRC(RS485_RX_BUFF,RS485_RX_CNT-2);//计算所接收数据的CRC
+                                        recCRC=RS485_RX_BUFF[RS485_RX_CNT-1]|(((u16)RS485_RX_BUFF[RS485_RX_CNT-2])<<8);//接收到的CRC(低字节在前，高字节在后)
+                                        if(calCRC==recCRC)//CRC校验正确
+                                        {
+                                                ///////////显示用
+
+        
+///////////////////////
+                                                /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                                switch(RS485_RX_BUFF[1])//根据不同的功能码进行处理
+                                                {
+                                                        case 2://读输入开关量
+                                                        {
+                                                                Modbus_02_Solve();
+                                                                break;
+                                                        }
+
+                                                        case 1://读输出开关量
+                                                        {
+                                                                Modbus_01_Solve();
+                                                                break;
+                                                        }
+
+                                                        case 5://写单个输出开关量
+                                                        {
+                                                                Modbus_05_Solve();
+                                                                break;
+                                                        }
+
+                                                        case 15://写多个输出开关量
+                                                        {
+                                                                Modbus_15_Solve();
+                                                                break;
+                                                        }
+
+                                                        case 03: //读多个寄存器
+                                                        {
+                                                                Modbus_03_Solve();
+                                                                break;
+                                                        }
+
+                                                        case 06: //写单个寄存器
+                                                        {
+                                                                Modbus_06_Solve();
+                                                                break;
+                                                        }
+
+                                                        case 16: //写多个寄存器
+                                                        {
+                                                                Modbus_16_Solve();
+                                                                break;
+                                                        }
+
+
+                                                }
+                                                //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                        }
+                                        else//CRC校验错误
+                                        {
+
+                                                RS485_TX_BUFF[0]=RS485_RX_BUFF[0];
+                                                RS485_TX_BUFF[1]=RS485_RX_BUFF[1]|0x80;
+                                                RS485_TX_BUFF[2]=0x04; //异常码
+                                                RS485_SendData(RS485_TX_BUFF,3);
+                                        }
+                                }
+                                else//寄存器地址超出范围
+                                {
+                                        RS485_TX_BUFF[0]=RS485_RX_BUFF[0];
+                                        RS485_TX_BUFF[1]=RS485_RX_BUFF[1]|0x80;
+                                        RS485_TX_BUFF[2]=0x02; //异常码
+                                        RS485_SendData(RS485_TX_BUFF,3);
+                                }
+                        }
+                        else//功能码错误
+                        {
+                                RS485_TX_BUFF[0]=RS485_RX_BUFF[0];
+                                RS485_TX_BUFF[1]=RS485_RX_BUFF[1]|0x80;
+                                RS485_TX_BUFF[2]=0x01; //异常码
+                                RS485_SendData(RS485_TX_BUFF,3);
+                        }
+          }
+
+                RS485_FrameFlag=0;//复位帧结束标志
+                RS485_RX_CNT=0;//接收计数器清零
+                RS485_TX_EN=0;//开启接收模式
+        }
 }
+
 
 int main()
 {
-	float vol,DACvol;
-	u16 DACVol=0x00;
-	u16 crc_get=0x00;
-	u16 crc_test;
-	u8 key=0,key1=0,key2=0;
-	u8 crc_flag=0;
-	u8 rs485_i=0;
-	u8 rs485_len=0;
-	RS485_TX_EN=0;
-	u8 rs485Sendbuf[9]={0};
-	u8 rs485Receivebuf[9]={0};
+
+	
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 	LED_Init();
-	uart_Init(115200);
+	//uart_Init(115200);
 	Key_Init();
-	Beep_Init();
-	Dac_Init();
-	Adc_Init();
+	//Beep_Init();
+	//Dac_Init();
+	//Adc_Init();
 	OLED_Init();
-	RS485_Init(9600);
+	RS485_Init();
 	OLED_ShowString(0,0,"RemoteIo_ModeBus",16);  
-	OLED_ShowString(0,24,"DI:",12);  
- 	OLED_ShowString(0,40,"DO:",12);  
- 	OLED_ShowString(0,52,"AI:",12);  
- 	OLED_ShowString(64,52,"AO:",12); 
-	OLED_ShowString(80,52,"...",12);	
-	OLED_Refresh_Gram( );//更新显示到OLED
-	close_led(LED1_PIN);	
-	close_led(LED2_PIN);
-	DAC_Set_Vol(0);
+	OLED_Refresh_Gram( );//更新显示到OLED	
 	while(1)
 	{
-		key=KEY_SCAN(0);
-		vol=(float)GET_ADC_AVE(8,5)*(3.3/4096);
-		/*test*/
-		//DACVol=(DACVol|buf[5])<<8;
-		//DACVol=(DACVol|buf[6]);
-		//DAC_Set_Vol((int)DACVol);
-		//OLED_ShowNum(0,40,DACvol,8,12);
-		//DACvol=(float)(DACVol/3300)*3.3;
-		
-		//OLED_ShowFloat(70,52,DACvol,12);	
-		/**/
-		OLED_ShowFloat(10,52,vol,12);	    
-		OLED_Refresh_Gram();        //更新显示到OLED
-		switch(key)
-		{
-			case 1:OLED_ShowString(15,24,"Key 1 is on",12);key1=1;key2=0;break;
-			case 2:OLED_ShowString(15,24,"Key 2 is on",12);key2=1;key1=0;break;
-			default:OLED_ShowString(15,24,"                ",12);key1=0;key2=0;   //按钮的状态如何被保存住，想法：删掉default 然后在第一句清零
-		}
- 
-		if(! RS485_TX_EN)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
-		{
-			RS485_Receive_Data(rs485Receivebuf,&rs485_len);
-			//recflag=GetReceivebuff(rs485Receivebuf,Rec_Temp);
-			crc_test=CalCRC(rs485Receivebuf,7);
-			crc_get=(u16)(rs485Receivebuf[8]<<8 |rs485Receivebuf[7]);
-			//OLED_ShowNum(0,20,crc_test,16,12);
-			//OLED_ShowNum(0,40,crc_get,16,12);
-			//OLED_Refresh_Gram();//更新显示到OLED
-			if((crc_test==crc_get)&&(rs485Receivebuf[1]==mbaddress))
-			{
-			crc_flag=1;
-			//OLED_ShowNum(10,50,crc_flag,3,12);
-			//OLED_Refresh_Gram();//更新显示到OLED
-			}
-			else crc_flag=0;
-			Delay_ms(10);
-			
-		}
-		if(rs485_len&&crc_flag)
-		{
-			if(rs485_len>9) rs485_len=9;
-			if(rs485Receivebuf[0]==0x02)
-			{
-				GetSendbuff(rs485Sendbuf,key1,key2,LED1,LED2,vol,0);
-			}
-			if(rs485Receivebuf[0]==0x05) //发送成功后返回一帧
-			{
-				Delay_ms(10);
-				switch(rs485Receivebuf[2]) //
-				{
-					case 0x02:open_led(LED1_PIN);close_led(LED2_PIN);break;
-					case 0x01:close_led(LED1_PIN);open_led(LED2_PIN);break;
-					case 0x00:close_led(LED1_PIN);close_led(LED2_PIN);break;
-					case 0x03:open_led(LED1_PIN);open_led(LED2_PIN); break;
-					default: break;
-				}
-				Delay_ms(10);
-				DACVol=(DACVol|rs485Receivebuf[5])<<8;
-				printf("Vol:%X,rs485Sendbuf[5]:%X\r\n",DACVol,rs485Receivebuf[5]);
-				DACVol=(DACVol|rs485Receivebuf[6]);
-				printf("Vol:%X,rs485Sendbuf[6]:%X\r\n",DACVol,rs485Receivebuf[6]);
-				Delay_ms(10);
-				DAC_Set_Vol((int)DACVol);
-				DACvol=(float)DACVol/3300*3.3;
-				printf("Vol:%1.3f\r\n",DACvol);
-				OLED_ShowFloat(70,52,DACvol,12);	    
-				OLED_Refresh_Gram();        //更新显示到OLED
-				GetSendbuff(rs485Sendbuf,key1,key2,LED1,LED2,vol,1);
-			}
-				RS485_TX_EN=1;
-				DACVol=0x00;
-			  for(rs485_i=0;rs485_i<9;rs485_i++)
-				{
-					rs485Receivebuf[rs485_i]=0;
-				}
-		}
-		if(RS485_TX_EN)
-		{
-			RS485_Send_Data(rs485Sendbuf,9);
-			Delay_ms(10);
-			RS485_TX_EN=0;
-			for(rs485_i=0;rs485_i<9;rs485_i++)
-			{
-				rs485Sendbuf[rs485_i]=0;
-			}
-		}
-		
-		Delay_ms(500);
+		RS485_Service();
 	}
 
 }
-
+*/

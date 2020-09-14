@@ -338,7 +338,7 @@
               <MiscControls></MiscControls>
               <Define>STM32F40_41xxx,USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CORE;..\FWLIB\inc;..\USER;..\HARDWARE\LED;..\SYSTEM\delay;..\SYSTEM\usart;..\HARDWARE\ADCDAC;..\HARDWARE\key;..\HARDWARE\BEEP;..\HARDWARE\OLED;..\SYSTEM\sys;..\HARDWARE\RS485;..\SYSTEM\modbus</IncludePath>
+              <IncludePath>..\CORE;..\FWLIB\inc;..\USER;..\HARDWARE\LED;..\SYSTEM\delay;..\HARDWARE\ADCDAC;..\HARDWARE\key;..\HARDWARE\OLED;..\SYSTEM\sys;..\HARDWARE\BEEP;..\HARDWARE\RS485;..\SYSTEM\TIMER;..\SYSTEM\usart;..\SYSTEM\modbus</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -451,6 +451,11 @@
               <FileName>sys.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\SYSTEM\sys\sys.c</FilePath>
+            </File>
+            <File>
+              <FileName>timer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\SYSTEM\TIMER\timer.c</FilePath>
             </File>
             <File>
               <FileName>mbcrc.c</FileName>

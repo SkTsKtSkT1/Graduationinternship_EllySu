@@ -3,83 +3,368 @@
 #include "oled.h"
 #include "stm32f4xx.h"
 #include "led.h"
+#include "rs485.h"
 /*
-地址 功能码  按键1 按键2 LED1 LED2  ADC    DAC     CRC低位   CRC高位 
-
-功能码0x02（读） 
- 1  2              3                      4/5      6/7     8        9
-       0000按键1 按键2 LED1 LED2         ADC       0   CRC低位   CRC高位  
-
-功能码 0x05 （写）
-1  2             3                     4/5      6/7     8       9
-      000000  LED1 LED2                0       DAC  CRC低位   CRC高位
-
-ADC，DAC扩大一千倍，写入寄存器。
-
-从机（开发板）
-
- 1       2                        3                   4/5       6/7      8         9
-地址  字节数        0000按键1 按键2 LED1 LED2       ADC       0     CRC低位   CRC高位
-
-*/
-
-
-void GetSendbuff(u8* send_temp,u8 key1,u8 key2,u8 LED1,u8 LED2,float val,u8 ok) //ok借用byte3最高位
+ * <------------------------ MODBUS SERIAL LINE PDU (1) ------------------->
+ *              <----------- MODBUS PDU (1') ---------------->
+ *  +-----------+---------------+----------------------------+-------------+
+ *  | Address   | Function Code | Data                       | CRC/LRC     |
+ *  +-----------+---------------+----------------------------+-------------+
+ *  |           |               |                                   |
+ * (2)        (3/2')           (3')                                (4)
+ *
+ * (1)  ... MB_SER_PDU_SIZE_MAX = 256
+ * (2)  ... MB_SER_PDU_ADDR_OFF = 0
+ * (3)  ... MB_SER_PDU_PDU_OFF  = 1
+ * (4)  ... MB_SER_PDU_SIZE_CRC = 2
+ *
+ * (1') ... MB_PDU_SIZE_MAX     = 253
+ * (2') ... MB_PDU_FUNC_OFF     = 0
+ * (3') ... MB_PDU_DATA_OFF     = 1
+ */
+ u32 testData1=1201,testData2=1002,testData3=1000,testData4=0x2030;
+ vu32 *Modbus_InputIO[100]={0};
+ vu32 *Modbus_OutputIO[100]={0};
+ u16  *Modbus_HoldReg[1000]={0};
+ 
+ u16 startRegAddr;
+ u16 RegNum;
+ u16 CRC_Cal;
+ u8 RS485_Addr=0x01;
+ u8 RS485_FrameFlag=0;//帧结束标记
+ u8 RS485_TX_BUFF[256];
+void Modbus_RegMap(void)
 {
-	u8 byte3=0x00;
-	u16 adc_val=1000*val; //扩大一千倍
-	send_temp[0]=mbaddress;
-	send_temp[1]=1;
-	byte3=byte3|key1;
-	byte3=byte3<<1;
-	byte3=byte3|key2;
-	byte3=byte3<<1;
-	byte3=byte3|LED1;
-	byte3=byte3<<1;
-	byte3=byte3|LED2;
-	if(ok==1)
-	{
-		byte3=byte3|0x80;
-	}
-	send_temp[2]=byte3;
+	//输入开关量
+	   Modbus_InputIO[0]=(vu32*)&PEin(3);//KEY1
+	   Modbus_InputIO[1]=(vu32*)&PEin(2);//KEY2
+	//输出开关量
+	   Modbus_OutputIO[0]=(vu32*)&PBout(12);//LED1
+	   Modbus_OutputIO[1]=(vu32*)&PBout(13);//LED2
 	
-	send_temp[4]=adc_val;
-  send_temp[3]=adc_val>>8;
-
-  send_temp[5]=0;
-  send_temp[6]=0;
-  send_temp[7]=0;
-  send_temp[8]=0;
-	
-	send_temp[7]=CalCRC(send_temp,7);
-	send_temp[8]=CalCRC(send_temp,7)>>8;
-
+	//寄存器测试
+		 Modbus_HoldReg[0]=(u16*)&testData1;
+		 Modbus_HoldReg[1]=(u16*)&testData2;
+		 Modbus_HoldReg[2]=(u16*)&testData3;
+		 Modbus_HoldReg[3]=(u16*)&testData1;
+		 Modbus_HoldReg[4]=(u16*)&testData2;
+		 Modbus_HoldReg[5]=(u16*)&testData2;
 }
-/*
-先进行CRC校验 然后比较地址随后进行操作
-*/
-int GetReceivebuff(u8 *buff,u8 *buff1)
+
+void Modbus_01_Solve()// LED为低位点亮 因此两个都不亮->0X03
 {
-	u8 i;
-	u16 crc_get=0x00;
-	u16 crc_test=CalCRC(buff,7);
-	crc_get=(u16)(buff[8]<<8 | buff[7]);
-	if((crc_get==crc_test)&&(buff[1]=mbaddress))
+	u16 Bytenum;
+	u16 i;
+	RegNum=((((u16)RS485_RX_BUF[4])<<8)|(RS485_RX_BUF[5]));
+	if((startRegAddr+RegNum)<100)
 	{
-		for(i=0;i<9;i++)
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1];
+		Bytenum=RegNum/8;
+		if(RegNum%8) Bytenum+=1;
+		RS485_TX_BUFF[2]=Bytenum;
+		for(i=0;i<=Bytenum;i++)  //比较可能出问题的地方
 		{
-			buff1[i]=buff[i];
+			if(i%8==0) RS485_TX_BUFF[3+i/8]=0x00;
+			RS485_TX_BUFF[3+i/8]>>=1;
+			RS485_TX_BUFF[3+i/8]|=((*Modbus_OutputIO[startRegAddr+i]<<7)&0x80);
+			if(i==RegNum-1)
+			{
+				if(RegNum%8) RS485_TX_BUFF[3+i/8]>>=8-(RegNum%8);//add zero;
+			}
 		}
-		return 1;
+		CRC_Cal=CalCRC(RS485_TX_BUFF,Bytenum+3);
+		RS485_TX_BUFF[Bytenum+3]=(CRC_Cal)&0xFF;
+		RS485_TX_BUFF[Bytenum+4]=(CRC_Cal>>8)&0xFF;  //low high
+		RS485_Send_Data(RS485_TX_BUFF,Bytenum+5);
+		
 	}
-	return 0;
+	else
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1]|0x80;
+		RS485_TX_BUFF[2]=0x02;
+		RS485_Send_Data(RS485_TX_BUFF,3);
+		
+	}
 }
 
+void Modbus_02_Solve()// KEY按下为低电平,因此若无按键则为0X03
+{
+	u16 Bytenum;
+	u16 i;
+	RegNum=((((u16)RS485_RX_BUF[4])<<8)|(RS485_RX_BUF[5]));
+	if((startRegAddr+RegNum)<100)
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1];
+		Bytenum=RegNum/8;
+		if(RegNum%8) Bytenum+=1;
+		RS485_TX_BUFF[2]=Bytenum;
+		for(i=0;i<=Bytenum;i++) //比较可能出问题的地方
+		{
+			if(i%8==0) RS485_TX_BUFF[3+i/8]=0x00;
+			RS485_TX_BUFF[3+i/8]>>=1;
+			RS485_TX_BUFF[3+i/8]|=((*Modbus_InputIO[startRegAddr+i]<<7)&0x80);
+			if(i==RegNum-1)
+			{
+				if(RegNum%8) RS485_TX_BUFF[3+i/8]>>=8-(RegNum%8);//add zero;
+			}
+		}
+		CRC_Cal=CalCRC(RS485_TX_BUFF,Bytenum+3);
+		RS485_TX_BUFF[Bytenum+3]=(CRC_Cal)&0xFF;
+		RS485_TX_BUFF[Bytenum+4]=(CRC_Cal>>8)&0xFF;  //low high
+		RS485_Send_Data(RS485_TX_BUFF,Bytenum+5);
+		
+	}
+	else
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=0x82;
+		RS485_TX_BUFF[2]=0x02;
+		RS485_Send_Data(RS485_TX_BUFF,3);
+	}
+}
 
+void Modbus_03_Solve()
+{
+	u16 i;
+	RegNum=((((u16)RS485_RX_BUF[4])<<8)|(RS485_RX_BUF[5]));
+	if((startRegAddr+RegNum)<1000)
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1];
+		RS485_TX_BUFF[2]=RegNum*2;
+		
+		for(i=0;i<RegNum;i++)
+		{
+			RS485_TX_BUFF[3+i*2]=(*Modbus_HoldReg[startRegAddr+i]>>8)&0xFF;
+			RS485_TX_BUFF[4+i*2]=(*Modbus_HoldReg[startRegAddr+i])&0xFF;
+		}
+		CRC_Cal=CalCRC(RS485_TX_BUFF,RegNum*2+3);
+		RS485_TX_BUFF[RegNum*2+3]=(CRC_Cal)&0xFF;
+		RS485_TX_BUFF[RegNum*2+4]=(CRC_Cal>>8)&0xFF;  //low high
+		RS485_Send_Data(RS485_TX_BUFF,RegNum*2+5);
+	}
+	else
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=0x83;
+		RS485_TX_BUFF[2]=0x02;
+		RS485_Send_Data(RS485_TX_BUFF,3);
+	}
+}
 
+void Modbus_05_Solve()  //LED是反的
+{
+	if((startRegAddr+RegNum)<100)
+	{
+		if((RS485_RX_BUF[4]==0xFF)&&(RS485_RX_BUF[5]==0x00)) *Modbus_OutputIO[startRegAddr]=0x00;
+		if((RS485_RX_BUF[4]==0x00)&&(RS485_RX_BUF[5]==0x00)) *Modbus_OutputIO[startRegAddr]=0x01;
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1];
+		RS485_TX_BUFF[2]=RS485_RX_BUF[2];
+		RS485_TX_BUFF[3]=RS485_RX_BUF[3];		
+		RS485_TX_BUFF[4]=RS485_RX_BUF[4];
+		RS485_TX_BUFF[5]=RS485_RX_BUF[5];	
+		
+		CRC_Cal=CalCRC(RS485_TX_BUFF,6);
+		RS485_TX_BUFF[6]=(CRC_Cal)&0xFF;
+		RS485_TX_BUFF[7]=(CRC_Cal>>8)&0xFF;  //low high		
+		RS485_Send_Data(RS485_TX_BUFF,8);
+		
+	}
+	else
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=0x85;
+		RS485_TX_BUFF[2]=0x02;
+		RS485_Send_Data(RS485_TX_BUFF,3);
+	}
+}
 
+void Modbus_06_Solve()
+{
+	if(startRegAddr<1000)
+	{
+		*Modbus_HoldReg[startRegAddr]=RS485_RX_BUF[4]<<8;
+		*Modbus_HoldReg[startRegAddr]|=((u16)RS485_RX_BUF[5]);
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1];
+		RS485_TX_BUFF[2]=RS485_RX_BUF[2];
+		RS485_TX_BUFF[3]=RS485_RX_BUF[3];		
+		RS485_TX_BUFF[4]=RS485_RX_BUF[4];
+		RS485_TX_BUFF[5]=RS485_RX_BUF[5];	
+		
+		CRC_Cal=CalCRC(RS485_TX_BUFF,6);
+		RS485_TX_BUFF[6]=(CRC_Cal)&0xFF;
+		RS485_TX_BUFF[7]=(CRC_Cal>>8)&0xFF;  //low high		
+		RS485_Send_Data(RS485_TX_BUFF,8);
+	}
+	else
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=0x86;
+		RS485_TX_BUFF[2]=0x02;
+		RS485_Send_Data(RS485_TX_BUFF,3);
+	}
+}
 
+void Modbus_0f_Solve() //LED 反的 RX[7+i] i=0~k,先写低地址
+{
+	u16 i;
+	RegNum=((((u16)RS485_RX_BUF[4])<<8)|(RS485_RX_BUF[5]));
+	
+	if((startRegAddr+RegNum)<100)
+	{
+		for(i=0;i<RegNum;i++)
+		{
+			if(RS485_RX_BUF[7+i/8]&0x01) *Modbus_OutputIO[startRegAddr+i]=0x00;
+			else *Modbus_OutputIO[startRegAddr+i]=0x01;
+			RS485_RX_BUF[7+i/8]>>=1;
+		}
+	
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1];
+		RS485_TX_BUFF[2]=RS485_RX_BUF[2];
+		RS485_TX_BUFF[3]=RS485_RX_BUF[3];		
+		RS485_TX_BUFF[4]=RS485_RX_BUF[4];
+		RS485_TX_BUFF[5]=RS485_RX_BUF[5];
+		CRC_Cal=CalCRC(RS485_TX_BUFF,6);
+		RS485_TX_BUFF[6]=(CRC_Cal)&0xFF;
+		RS485_TX_BUFF[7]=(CRC_Cal>>8)&0xFF;  //low high		
+		RS485_Send_Data(RS485_TX_BUFF,8);		
+	}
+	else
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=0x8F;
+		RS485_TX_BUFF[2]=0x02;
+		RS485_Send_Data(RS485_TX_BUFF,3);
+	}
+	
+	
+}
 
+void Modbus_10_Solve()
+{
+	u16 i;
+	RegNum=((((u16)RS485_RX_BUF[4])<<8)|(RS485_RX_BUF[5]));
+	if(startRegAddr+RegNum<1000)
+	{
+		for(i=0;i<RegNum;i++)
+		{
+			*Modbus_HoldReg[startRegAddr+i]=RS485_RX_BUF[7+i*2]<<8;
+			*Modbus_HoldReg[startRegAddr+i]|=((u16)RS485_RX_BUF[8+i*2]);
+		}
+		
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=RS485_RX_BUF[1];
+		RS485_TX_BUFF[2]=RS485_RX_BUF[2];
+		RS485_TX_BUFF[3]=RS485_RX_BUF[3];		
+		RS485_TX_BUFF[4]=RS485_RX_BUF[4];
+		RS485_TX_BUFF[5]=RS485_RX_BUF[5];	
+		
+		CRC_Cal=CalCRC(RS485_TX_BUFF,6);
+		RS485_TX_BUFF[6]=(CRC_Cal)&0xFF;
+		RS485_TX_BUFF[7]=(CRC_Cal>>8)&0xFF;  //low high		
+		RS485_Send_Data(RS485_TX_BUFF,8);
+	}
+	else
+	{
+		RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+		RS485_TX_BUFF[1]=0x90;
+		RS485_TX_BUFF[2]=0x02;
+		RS485_Send_Data(RS485_TX_BUFF,3);
+	}
+}
+void RS485_service()
+{
+	u16 CRC_Rec;
+	if(RS485_FrameFlag==1)
+	{
+		if(RS485_RX_BUF[0]==RS485_Addr)//地址正确
+		{
+			if((RS485_RX_BUF[1]==0x01)||(RS485_RX_BUF[1]==0x02)||(RS485_RX_BUF[1]==0x03)||(RS485_RX_BUF[1]==0x05)||(RS485_RX_BUF[1]==0x06)||(RS485_RX_BUF[1]==0x0f)||(RS485_RX_BUF[1]==0x10))
+			{
+				startRegAddr=((u16)RS485_RX_BUF[2]<<8)|RS485_RX_BUF[3];//获得起始地址
+				if(startRegAddr<1000) //地址正常
+				{
+					CRC_Cal=CalCRC(RS485_RX_BUF,RS485_RX_CNT-2);
+					CRC_Rec=((u16)RS485_RX_BUF[RS485_RX_CNT-1]<<8)|RS485_RX_BUF[RS485_RX_CNT-2] ;  //crc low crc high
+					if(CRC_Cal==CRC_Rec)
+					{
+						switch(RS485_RX_BUF[1])
+						{
+							case 0x01:
+							{
+								Modbus_01_Solve();
+								break;
+							}
+							case 0x02:
+							{
+								Modbus_02_Solve();
+								break;
+							}
+							case 0x03:
+							{
+								Modbus_03_Solve();
+								break;
+							}
+							case 0x05:
+							{
+								Modbus_05_Solve();
+								break;
+							}
+							case 0x06:
+							{
+								Modbus_06_Solve();
+								break;
+							}
+							case 0x0f:
+							{
+								
+								Modbus_0f_Solve();
+								break;
+							}
+							case 0x10:
+							{
+								Modbus_10_Solve();
+								break;
+							}
+						}
+					}
+					else //crc err
+					{
+					 RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+					 RS485_TX_BUFF[1]=RS485_RX_BUF[1]|0x80;
+           RS485_TX_BUFF[2]=0x04; //异常码
+           RS485_Send_Data(RS485_TX_BUFF,3);
+					}
+				}
+				else //crc err
+				{
+					 RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+					 RS485_TX_BUFF[1]=RS485_RX_BUF[1]|0x80;
+           RS485_TX_BUFF[2]=0x02; //异常码
+           RS485_Send_Data(RS485_TX_BUFF,3);
+				}
+			}
+			else //func code err
+			{
+				RS485_TX_BUFF[0]=RS485_RX_BUF[0];
+				RS485_TX_BUFF[1]=RS485_RX_BUF[1]|0x80;
+        RS485_TX_BUFF[2]=0x01; //异常码
+        RS485_Send_Data(RS485_TX_BUFF,3);
+			}
+		}
+		/*end*/
+		 RS485_FrameFlag=0;//复位帧结束标志
+     RS485_RX_CNT=0;//接收计数器清零
+     RS485_TX_EN=0;//开启接收模式  
+	}
+	
+}
 
 
 

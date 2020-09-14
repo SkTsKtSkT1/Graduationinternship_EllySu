@@ -19,11 +19,11 @@ int main()
 	LED_Init();
 	Key_Init();
 	OLED_Init();
+	Dac_Init();
+	Adc_Init();
 	RS485_Init(9600);
 	OLED_ShowString(0,0,"RemoteIo_ModeBus",16);
 	OLED_Refresh_Gram( );//更新显示到OLED
-//	LED1=0;
-//	LED2=1;
 	while(1)
 	{
 		RS485_service();

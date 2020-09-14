@@ -22,7 +22,7 @@
  * (2') ... MB_PDU_FUNC_OFF     = 0
  * (3') ... MB_PDU_DATA_OFF     = 1
  */
- u32 testData1=1201,testData2=1002,testData3=1000,testData4=0x2030;
+ u32 testData1=0,testData2=2000,testData3=00,testData4=0;
  vu32 *Modbus_InputIO[100]={0};
  vu32 *Modbus_OutputIO[100]={0};
  u16  *Modbus_HoldReg[1000]={0};
@@ -33,6 +33,10 @@
  u8 RS485_Addr=0x01;
  u8 RS485_FrameFlag=0;//帧结束标记
  u8 RS485_TX_BUFF[256];
+ 
+ u16 dac_vol=0;
+ u16 adc_vol=0;
+ 
 void Modbus_RegMap(void)
 {
 	//输入开关量
@@ -41,10 +45,13 @@ void Modbus_RegMap(void)
 	//输出开关量
 	   Modbus_OutputIO[0]=(vu32*)&PBout(12);//LED1
 	   Modbus_OutputIO[1]=(vu32*)&PBout(13);//LED2
+		   Modbus_OutputIO[2]=(vu32*)&PBout(14);//LED3
+	   Modbus_OutputIO[3]=(vu32*)&PBout(15);//LED4
+		   Modbus_OutputIO[4]=(vu32*)&PBout(11);//LED5
 	
 	//寄存器测试
-		 Modbus_HoldReg[0]=(u16*)&testData1;
-		 Modbus_HoldReg[1]=(u16*)&testData2;
+		 Modbus_HoldReg[0]=(u16*)&testData1; //ADC
+		 Modbus_HoldReg[1]=(u16*)&testData2; //DAC
 		 Modbus_HoldReg[2]=(u16*)&testData3;
 		 Modbus_HoldReg[3]=(u16*)&testData1;
 		 Modbus_HoldReg[4]=(u16*)&testData2;
@@ -281,6 +288,16 @@ void Modbus_10_Solve()
 void RS485_service()
 {
 	u16 CRC_Rec;
+	adc_vol=Get_Adc(8);
+	testData1=adc_vol;   //ADC_VOL/4096*3.3=VOL
+	if((testData2<3300)&&(testData2>0))
+	{
+		dac_vol=testData2;
+		DAC_Set_Vol(dac_vol);   //VOL=DAC_VOL/3300*3.3
+	}
+	OLED_ShowString(0,20,"AI:",12);OLED_ShowNum(20,20,adc_vol,8,12);
+	OLED_ShowString(0,40,"AO:",12);OLED_ShowNum(40,20,dac_vol,8,12);
+	OLED_Refresh_Gram( );//更新显示到OLED
 	if(RS485_FrameFlag==1)
 	{
 		if(RS485_RX_BUF[0]==RS485_Addr)//地址正确

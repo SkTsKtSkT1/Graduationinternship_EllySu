@@ -45,9 +45,9 @@ void Modbus_RegMap(void)
 	//输出开关量
 	   Modbus_OutputIO[0]=(vu32*)&PBout(12);//LED1
 	   Modbus_OutputIO[1]=(vu32*)&PBout(13);//LED2
-		   Modbus_OutputIO[2]=(vu32*)&PBout(14);//LED3
+		 Modbus_OutputIO[2]=(vu32*)&PBout(14);//LED3
 	   Modbus_OutputIO[3]=(vu32*)&PBout(15);//LED4
-		   Modbus_OutputIO[4]=(vu32*)&PBout(11);//LED5
+		 Modbus_OutputIO[4]=(vu32*)&PBout(11);//LED5
 	
 	//寄存器测试
 		 Modbus_HoldReg[0]=(u16*)&testData1; //ADC
@@ -70,7 +70,7 @@ void Modbus_01_Solve()// LED为低位点亮 因此两个都不亮->0X03
 		Bytenum=RegNum/8;
 		if(RegNum%8) Bytenum+=1;
 		RS485_TX_BUFF[2]=Bytenum;
-		for(i=0;i<=Bytenum;i++)  //比较可能出问题的地方
+		for(i=0;i<RegNum;i++)  //比较可能出问题的地方
 		{
 			if(i%8==0) RS485_TX_BUFF[3+i/8]=0x00;
 			RS485_TX_BUFF[3+i/8]>>=1;
@@ -108,7 +108,7 @@ void Modbus_02_Solve()// KEY按下为低电平,因此若无按键则为0X03
 		Bytenum=RegNum/8;
 		if(RegNum%8) Bytenum+=1;
 		RS485_TX_BUFF[2]=Bytenum;
-		for(i=0;i<=Bytenum;i++) //比较可能出问题的地方
+		for(i=0;i<RegNum;i++) //比较可能出问题的地方
 		{
 			if(i%8==0) RS485_TX_BUFF[3+i/8]=0x00;
 			RS485_TX_BUFF[3+i/8]>>=1;
